@@ -1,0 +1,871 @@
+---
+title: 'Data Wrangling and Husbandry with R - FINAL PROJECT'
+author: "Boubacar Issoufou Anaroua"
+date: "4/10/2018"
+output: html_document
+---
+
+```{r setup,include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+library(rvest)
+library(httr)
+library(curl)
+library(jsonlite)
+library(tidytext)
+library(tidyverse)
+library(stringr)
+library(magrittr)
+library(knitr)
+library(printr)
+library(twitteR)
+library(ROAuth)
+library(bitops)
+library(RCurl)
+library(stringr)
+library(NLP)
+library(tm)
+library(ggmap)
+library(plyr)
+library(dplyr)
+library(RColorBrewer)
+library(wordcloud)
+library(ggcorrplot)
+library(pls)
+library(nnet)
+library(kernlab)
+library(jpeg)
+library(randomForest)
+library(foreign)
+library(reshape2)
+library(httr)
+library(tidyr)
+library(plotly)
+library(reshape2)
+library(printr)
+library(coinmarketcapr)
+library(treemap)
+devtools::install_github('hadley/ggplot2')
+
+
+
+
+```
+
+Polarity Classification of Bitcoin,Netflix and Twitter Data using Sentiment Analysis.
+
+1.Introduction 
+
+Bitcoin is an advanced digital money and installment framework that is altogether decentralized, which means it depends on peer to-peer exchanges with no bureaucratic oversight. Bitcoin offers a novel open door for forecast due its relatively young age and resulting volatility. On the other hand, Netflix is an American entertainment company founded by Reed Hastings and Marc Randolph on August 29, 1997, in Scotts Valley, California.It provides streaming media, video-on-demand online, and DVD by mail. In 2013, Netflix expanded into film and television production as well as online distribution.
+This project is divided into 3 parts:
+First,finalize a model: train a final model using train/test splits before making any prediction.
+Second,classification and Regression Predictions:
+apply supervised learning algorithms where giving input variables, 
+the model learns a mapping to suitable output quantities which is the daily price change (UP and DOWN) in this case.
+Third, Sentiment Analysis using Twitter Data :
+apply some computational tasks to automatically determine what feelings a writer is expressing in a text that affect the price of Bitcoin and Netflix.
+
+
+Why Netflix and Bitcoin :
+
+-Netflix added far more users than expected in the first quarter and posted quarterly earnings.
+Netflix's addition of more than 7.4 million international subscribers set a new record, marking growth of 50 percent from a year ago. 
+
+-Bitcoin :There is Only Four Million Bitcoin Left to Be Mined out of 21 million. Every ten minutes, a new Bitcoin block is created by Bitcoin miners, which is a subgroup of the people running computer nodes that keep Bitcoin operational.
+```{r,echo=FALSE,message=FALSE,warning=FALSE}
+           plot_top_5_currencies()
+           market_today <- get_marketcap_ticker_all()
+           head(market_today[,1:8])           
+          
+           
+           df1 <- na.omit(market_today[,c('id','market_cap_usd')])
+           df1$market_cap_usd <- as.numeric(df1$market_cap_usd)
+           df1$formatted_market_cap <-  paste0(df1$id,'\n','$',format(df1$market_cap_usd,big.mark = ',',scientific = F, trim = T))
+           treemap(df1, index = 'formatted_market_cap', vSize = 'market_cap_usd', title = 'Cryptocurrency Market Cap', fontsize.labels=c(12, 8), palette='RdYlGn')
+```
+
+
+
+The above visualization explains the whole cryptocurrency market is propped by one currency primarily – Bitcoin which is the driving factor of this market. But it is also fascinating (and shocking at the same time) that Bitcoin and create a 100 Billion Dollar (USD) market. Whether this is a sign of bubble or no – We’ll leave that for market analysts to speculate, but being a data scientist or analyst, We have a lot of insights to extract from the above data and it should be interesting analysing such an expensive market.
+
+
+
+2.Packages Required :
+rvest,
+httr,
+curl,
+jsonlite,
+tidytext,
+tidyverse,
+stringr,
+magrittr,
+knitr,
+printr,
+twitteR,
+ROAuth,
+bitops,
+RCurl,
+stringr,
+NLP,
+tm,
+ggplot2,
+ggmap,
+plyr,
+dplyr,
+RColorBrewer,
+wordcloud,
+ggcorrplot,
+nnet,
+kernlab,
+jpeg,
+randomForest,
+foreign,
+nnet,
+reshape2,
+httr,
+tidyr,
+pls,
+plotly,
+reshape2,
+coinmarketcapr,
+treemap,
+printr.
+
+
+3.Data Preparation 
+
+Data history: Bitcoin from coin market for past 5 years, Netflix historical price from finance.yahoo for past 5 years and tweets for Bitcoin and Netflix from Twitter (7000 tweets for each).
+Beforehand, I collected four data sets, Netflix data which is literally almost clean to use, I just fix some variables such as the date that was changed to Unix time and use the regular expression to clean the data. On the other hand, Bitcoin data was very difficult to work with, because it was per minute data information with many missing values and many meaningless variables to deal with. I spent more time to clean the Bitcoin data. I first wrote a for loops to calculate the daily average information about each variable and then mutate new variable with daily information to change the data into a daily dataset. The reason why I did this, is to avoid overfitting data with multicollinearity. The last two data sets are for Sentiment Analysis using tweets from Twitter. I extracted 4000 tweets for Bitcoin and Netflix each using Twitter API key and cleaned the data, which was also difficult to clean. Actually, more difficult than Bitcoin data. After all difficult cleaning, I saved the final datasets and upload them to GitHub. Anyone interesting in using the data sets for further analysis can access and download them directly using this link: https://github.com/selecta21/Project_Boubacar
+
+
+```{r, echo=FALSE, message=FALSE,warning=FALSE}
+B_bitcoin <- read.table("https://raw.githubusercontent.com/selecta21/Project_Boubacar/master/Bouba_bitcoin.txt")
+
+B_NetflixStock <-read_csv("https://raw.githubusercontent.com/selecta21/Project_Boubacar/master/NFLX.csv")
+
+
+# Deleting column 6 for Netflix data, because the adj close and close price are the same. 
+B_NetflixStock <- B_NetflixStock[,-6]
+
+# Use regular expression to fix date format 
+B_bitcoin[,1] <- gsub(",","",B_bitcoin[,1])
+B_bitcoin[,1] <- str_replace_all(B_bitcoin[,1], fixed(" "), "")
+B_bitcoin[,1] <- as.Date(B_bitcoin[,1], "%B%d%Y")
+
+B_bitcoin<-B_bitcoin %>%
+arrange(Date)
+
+B_bitcoin[,6] <- as.numeric(gsub(",","",B_bitcoin[,6]))
+B_bitcoin[,7] <- as.numeric(gsub(",","",B_bitcoin[,7]))
+B_bitcoin <- na.omit(B_bitcoin)
+
+
+# Convert Date to Unix-time
+B_NetflixStock <- as.matrix(B_NetflixStock)
+B_NetflixStock[,1] <- as.POSIXct(B_NetflixStock[,1])
+B_bitcoin[,1] <- as.numeric(as.POSIXct(B_bitcoin[,1]))
+
+
+# Check if there is any NA 
+#anyNA(B_bitcoin)
+#anyNA(B_NetflixStock)
+
+
+#convert to data frame
+B_NetflixStock <- as.data.frame(B_NetflixStock)
+
+# convert character to numerical
+B_NetflixStock[,1] <- as.numeric(as.character(B_NetflixStock[,1]))
+B_NetflixStock[,2] <- as.numeric(as.character(B_NetflixStock[,2]))
+B_NetflixStock[,3] <- as.numeric(as.character(B_NetflixStock[,3]))
+B_NetflixStock[,4] <- as.numeric(as.character(B_NetflixStock[,4]))
+B_NetflixStock[,5] <- as.numeric(as.character(B_NetflixStock[,5]))
+B_NetflixStock[,6] <- as.numeric(as.character(B_NetflixStock[,6]))
+
+
+#Preparing data
+#Spliting Train and test
+#To avoid introducing a bias in test using train-data,
+#the train-test split should be performed before (most) data preparation steps.
+
+#The models that I am  explicitly focus on as part of this project are those of supervised learning,as
+#the outcome (UP/DOWN) for predicting the price direction are known and provided.
+#Because I'll need to eventually perform computations on the target variable, let's encode its 
+#values with numbers ("price up" = 1, "price no change " = 0  and "price down" = -1) and convert
+#its contents from string to integer type.
+
+# Create dummy for classification
+gb <- rep(NA,1564)
+gn <- rep(NA,1258)
+#########
+for (i in 1:(nrow(B_bitcoin)-1)) {
+
+if (B_bitcoin[i,2] > B_bitcoin[i + 1, 2]) {
+gb[i] <- -1
+}
+
+if (B_bitcoin[i,2] == B_bitcoin[i + 1, 2]) {
+gb[i]<- 0
+}
+if (B_bitcoin[i,2] < B_bitcoin[i + 1, 2]){
+gb[i] <- 1
+} 
+}
+
+
+for (i in 1:(nrow(B_NetflixStock)-1)) {
+
+if (B_NetflixStock[i,2] > B_NetflixStock[i + 1, 2]) {
+gn[i] <- -1
+}
+
+if (B_NetflixStock[i,2] == B_NetflixStock[i + 1, 2]) {
+gn[i]<- 0
+}
+if (B_NetflixStock[i,2] < B_NetflixStock[i + 1, 2]){
+gn[i] <- 1
+} 
+}
+
+
+# Mutate the new categorical target variable in the data and then split into 
+#training and testing before normalizing.
+
+B_data <- B_bitcoin[-1,-2]
+N_data <- B_NetflixStock[-1,-2]
+B_data$gb <- gb
+N_data$gn <- gn
+
+
+
+
+
+set.seed(123) # Set Seed so that same sample can be reproduced in future.
+# Now Selecting 75% of data as sample from total 'n' rows of the data  
+netflix <- sample(1:nrow(N_data), size = 0.25*nrow(N_data))
+bitcoin = sample(1:nrow(B_data), size=0.25*nrow(B_data))
+# Split data
+bitcoin.test = B_data[bitcoin,] #get test set
+bitcoin.train = B_data[-bitcoin,] #get training set
+
+
+netflix.test = N_data[netflix,] #get test set
+netflix.train = N_data[-netflix,] #get training set
+
+# separate the target variable ( open price) from predictiors
+B.train <- bitcoin.train[,-7]
+B.test <- bitcoin.test[,-7]
+yb.test <- bitcoin.test[,7]
+yb.train <- bitcoin.train[,7]
+
+N.train <- netflix.train[,-6]
+N.test <- netflix.test[,-6]
+yn.test <- netflix.test[,6]
+yn.train <- netflix.train[,6]
+
+##To avoid one of the most common errors in data science, let's split the 
+#data into training and testing before normalising them.
+#Center and scale the data to make the norms of all predictors the same,
+#i.e. on the same scale.
+
+
+
+for( i in 1:6){
+  
+  B.test[,i] <- (B.test[,i] - mean(B.train[,i])) / sd(B.train[,i])
+  
+  B.train[,i] <-  (B.train[,i] - mean(B.train[,i])) / sd(B.train[,i])
+  
+  
+}
+
+
+
+for( i in 1:5){
+  
+  N.test[,i] <- (N.test[,i] - mean(N.train[,i])) / sd(N.train[,i])
+  
+  N.train[,i] <-  (N.train[,i] - mean(N.train[,i])) / sd(N.train[,i])
+  
+  
+}
+
+```
+     4.Exploratory Data Analysis
+
+     4.1 Correlation between variables
+
+```{r,echo=FALSE,message=FALSE,warning=FALSE}
+
+# Correlation matrix
+corr <- round(cor(bitcoin.train[,-7]), 1)
+
+# Plot
+ggcorrplot(corr, hc.order = TRUE, 
+           type = "lower", 
+           lab = TRUE, 
+           lab_size = 3, 
+           method="circle", 
+           colors = c("tomato2", "white", "springgreen3"), 
+           title="Correlogram of Bitcoin", 
+           ggtheme=theme_bw)
+
+
+corr1 <- round(cor(netflix.train[,-7]), 1)
+
+# Plot
+ggcorrplot(corr1, hc.order = TRUE, 
+           type = "lower", 
+           lab = TRUE, 
+           lab_size = 3, 
+           method="circle", 
+           colors = c("tomato2", "white", "springgreen3"), 
+           title="Correlogram of Netflix", 
+           ggtheme=theme_bw)
+```
+
+
+As we can see from the above correlograms, there are some highly correlated variables into our data frames.
+Since we have multicollinearity issue: let's run PCR to deal with multicolinearity, because PCR can
+take care of that issue.
+
+
+Advantages of performing PCR:
+
+-Dimensionality reduction:  reducing the model complexity.
+
+-Avoidance of multicollinearity between predictors: 
+  A significant benefit for our data, because there 
+is some degree of multicollinearity between the variables,
+this procedure should be able to avoid this problem since
+performing PCA on the raw data produces linear combinations of the predictors that are uncorrelated.
+
+-Overfitting mitigation: all assumptions underlying PCR hold,
+thus we fitted a least squares model to the principal components and we got better results than when
+we fitted a least squares model to the original data since most of the variation and information related
+to the dependent variable is condensed in the principal components and by estimating less coefficients
+we reduced the risk of overfitting.
+
+
+
+
+         4.2 PCA analysis
+
+```{r, echo=FALSE,message=FALSE,warning=FALSE}
+
+# PCA with function prcomp for bitcoin
+set.seed (1000)
+Bouba_pca <- pcr(gb~., data = bitcoin.train, scale = TRUE, validation = "CV")
+summary(Bouba_pca)
+
+
+# PCA with function prcomp for netflix
+set.seed(1001)
+Bouba_pcaN <- pcr(gn~., data = netflix.train, scale = TRUE, validation = "CV")
+summary(Bouba_pcaN)
+# create data frame with scores
+scoresN = Bouba_pcaN$scores
+scores= Bouba_pca$scores
+
+```
+
+As you can see, two main results are printed, namely the validation error and the cumulative percentage of variance explained using n components.
+
+```{r,echo=FALSE,message=FALSE,warning=FALSE}
+# Plot the root mean squared error
+validationplot(Bouba_pca)
+validationplot(Bouba_pcaN)
+```
+
+
+
+As lower values of RMSE indicate better fit, 3 components already explained most of the variablility of our bitcoin data and 4 components for netflix data. But 2 components
+for each also are enough to explain the variablility as shown below:
+
+```{r,echo=FALSE,message=FALSE,warning=FALSE}
+# plot of observations
+plot(scoresN[,1],scoresN[,2],col=yn.train+2,pch=yn.train+1, main= "  NETFLIX PCA")
+plot(scores[,1],scores[,2],col=yb.train+2,pch=yb.train+1, main= "  BITCOIN PCA")
+
+
+n <- 944
+#PCA and clustering
+# svd
+mu.hat <- apply(netflix.train,2,mean)
+x.centered <- netflix.train - rep(1,nrow(netflix.train))%*%t(mu.hat)
+x.svd <- svd(x.centered)
+#x.svd$d
+
+#plot(scoresN[,1],scoresN[,2],col=rep(2:4,rep(n/3,3)),pch=rep(2:4,rep(n/3,3)))
+#plot(x.svd$u[,1]*x.svd$d[1],x.svd$u[,2]*x.svd$d[2],col=rep(2:4,rep(n/3,3)),pch=rep(2:4,rep(n/3,3)))
+
+
+p= 6
+x<-as.matrix(netflix.train)
+# generate random directions
+alpha <- matrix(rnorm(p*2),ncol=2)
+alpha <- qr.Q(qr(alpha))
+# plot random projection
+#pdf("projection_random.pdf")
+#par(mfrow=c(1,1))
+#plot(x%*%alpha[,1],x%*%alpha[,2],col=rep(2:4,rep(n/3,3)),pch=rep(2:4,rep(n/3,3)))
+
+
+# 3 projections together
+par(mfrow=c(1,3))
+plot(x[,1],x[,2],col=rep(2:4,rep(n/3,3)),pch=rep(2:4,rep(n/3,3)),main="oracle projection")
+plot(x.svd$u[,1]*x.svd$d[1],x.svd$u[,2]*x.svd$d[2],col=rep(2:4,rep(n/3,3)),pch=rep(2:4,rep(n/3,3)),main="PCA projection")
+plot(x%*%alpha[,1],x%*%alpha[,2],col=rep(2:4,rep(n/3,3)),pch=rep(2:4,rep(n/3,3)),main="random projection")
+
+```
+
+As we can see from our PCA projection , our Netflix (as well as Bitcoin data not showing on the plot) data is non linearly separable. So we are going to apply Kernel PCA which is a technique for non linearly separable data. 
+Kernel PCA is an extension of principal component analysis (PCA) using techniques of kernel methods.
+
+           4.3 Applying Kernel PCA ( Bitcoin data)
+```{r, echo=FALSE,message=FALSE,warning=FALSE}
+#preparing data
+Bouba_test.center <- as.data.frame(B.test)
+y.train <- as.data.frame(yb.train)
+Bouba_train.center <- as.data.frame(B.train)
+Bouba_train.center$y <- y.train
+colnames(Bouba_train.center[,7]) <- ""
+Bouba_train.center[["y"]] = factor(Bouba_train.center[["y"]])
+
+
+#kernel PCA
+par(mfrow=c(1,1))
+B_kpca <- kpca(~.,data=B.train, kernel='rbfdot', features=2)
+B_pre <- as.data.frame(predict(B_kpca,Bouba_train.center))
+B_pre$y <- Bouba_train.center$y 
+  
+B_pre.test <- as.data.frame(predict(B_kpca,Bouba_test.center))
+B_pre.test$y <- yb.test 
+
+#Fitting Logistic Regression to the training set
+B_classifer <- glm(formula = y~.,
+                   family = binomial,data = B_pre)
+summary(B_classifer)
+#Predicting the test set results
+prob_pre <- predict(B_classifer,type='response',newdata=B_pre.test[,-3])
+y.pred = ifelse(prob_pre>0.5,1,-1)
+#Making the confusion matrix
+cm= table(B_pre.test[,3],y.pred)
+print(cm)
+#Visualising the training set results
+set=B_pre.test
+X1= seq(min(set[,1]) -1,max(set[,1])+1,by=0.01)
+X2= seq(min(set[,2]) -1,max(set[,2])+1,by=0.01)
+grid_set = expand.grid(X1,X2)
+colnames(grid_set) = c('V1','V2')
+prob_set = predict(B_classifer, type='response', newdata= grid_set)
+y_grid = ifelse(prob_set > 0.5,1,-1)
+plot(set[,-3],main='Logistic Regression (Training set)',xlab='PC1', ylab='PC2',
+     xlim=range(X1), ylim= range(X2))
+```
+
+
+
+    With a Test error of 43%, our classification is better than random guess despite the complexity 
+    of predicting price change for bitcoin
+    
+    
+    
+```{r,echo=FALSE,message=FALSE,warning=FALSE}
+
+        library(jpeg)
+        plot_jpeg = function(path, add=FALSE)
+        {
+          require('jpeg')
+          jpg = readJPEG(path, native=T) # read the file
+          res = dim(jpg)[2:1] # get the resolution, [x, y]
+          if (!add) # initialize an empty plot area if add==FALSE
+            plot(1,1,xlim=c(1,res[1]),ylim=c(1,res[2]),asp=1,type='n',xaxs='i',yaxs='i',xaxt='n',yaxt='n',xlab='',ylab='',bty='n')
+          rasterImage(jpg,1,1,res[1],res[2])
+        }
+        
+        plot_jpeg('higher_dimension.jpg')     
+        
+```
+
+
+
+
+     4.4 Random Forest for bitcoin 
+```{r,echo=FALSE,message=FALSE,warning=FALSE}
+ # Random Forest
+        Bouba.rf <- randomForest(Bouba_train.center[,-7], Bouba_train.center[,7], prox=TRUE)
+        Bouba.p <- classCenter(Bouba_train.center[,-7], Bouba_train.center[,7], Bouba.rf$prox)
+        plot(Bouba_train.center[,5], Bouba_train.center[,6], pch=21, xlab=names(Bouba_train.center)[5], ylab=names(Bouba_train.center)[6],
+             bg=c("red", "blue", "green")[as.numeric(factor(Bouba_train.center$y))],
+             main="Bitcoin Data with Price fluctiations")
+        points(Bouba.p[,3], Bouba.p[,4], pch=21, cex=2, bg=c("red", "blue", "green")) 
+
+
+```
+
+
+
+We applied Random Forest algorithm above, because there are enough trees in the forest, the classifier won’t overfit the model. It produces the best possible split because
+highly correlated variables won't cause multi-collinearity issues in random forest model. Since we are dealing with predicting the price change which is almost impossible
+to separate the separate the target variable (price up and down).
+
+
+
+    4.5 Applying Kernel PCA (Netflix)
+```{r,echo=FALSE,message=FALSE,warning=FALSE}
+#preparing data
+Bouba_test.center <- as.data.frame(N.test)
+y.train <- as.data.frame(yn.train)
+Bouba_train.center <- as.data.frame(N.train)
+Bouba_train.center$y <- y.train
+colnames(Bouba_train.center[,6]) <- ""
+Bouba_train.center[["y"]] = factor(Bouba_train.center[["y"]])
+
+B_kpca <- kpca(~.,data=N.train, kernel='rbfdot', features=2)
+B_pre <- as.data.frame(predict(B_kpca,Bouba_train.center))
+B_pre$y <- Bouba_train.center$y 
+  
+B_pre.test <- as.data.frame(predict(B_kpca,Bouba_test.center))
+B_pre.test$y <- yn.test 
+
+#Fitting Logistic Regression to the training set
+B_classifer <- glm(formula = y~.,
+                   family = binomial,data = B_pre)
+summary(B_classifer)
+#Predicting the test set results
+prob_pre <- predict(B_classifer,type='response',newdata=B_pre.test[,-3])
+y.pred = ifelse(prob_pre>0.5,1,-1)
+#Making the confusion matrix
+cm= table(B_pre.test[,3],y.pred)
+#Visualising the training set results
+set=B_pre.test
+X1= seq(min(set[,1]) -1,max(set[,1])+1,by=0.01)
+X2= seq(min(set[,2]) -1,max(set[,2])+1,by=0.01)
+grid_set = expand.grid(X1,X2)
+colnames(grid_set) = c('V1','V2')
+prob_set = predict(B_classifer, type='response', newdata= grid_set)
+y_grid = ifelse(prob_set > 0.5,1,-1)
+plot(set[,-3],main='Logistic Regression (Training set)',xlab='PC1', ylab='PC2',
+     xlim=range(X1), ylim= range(X2))
+```
+
+
+
+    With a Test error of 42%, our classification is better than random guess despite the complexity 
+    of predicting price change for netflix stock  
+      
+
+
+
+     4.6 Random Forest for Netflix
+```{r, echo=FALSE,message=FALSE,warning=FALSE}
+  #Random Forest
+        Bouba.rf <- randomForest(Bouba_train.center[,-6], Bouba_train.center[,6], prox=TRUE)
+        Bouba.p <- classCenter(Bouba_train.center[,-6], Bouba_train.center[,6], Bouba.rf$prox)
+        plot(Bouba_train.center[,4], Bouba_train.center[,5], pch=21, xlab=names(Bouba_train.center)[4], ylab=names(Bouba_train.center)[5],
+             bg=c("red", "blue", "green")[as.numeric(factor(Bouba_train.center$y))],
+             main="Netflix Data with Price fluctiations")
+        points(Bouba.p[,3], Bouba.p[,4], pch=21, cex=2, bg=c("red", "blue", "green")) 
+```
+
+
+    Same as for random forest for bitcoin except little more overfit.
+
+
+
+4.7 Polarity classification
+Since the rise of social media, a large part of the current research has
+been focused on classifying natural language as either positive or negative sentiment.
+Polarity  classification  have  been  found  to  achieve  high  accuracy
+in  predicting  change  or  trends  in  public  sentiment,  for  a  myriad  of
+domains (e.g. stock price prediction, bitcoin price change)
+
+
+```{r, echo=FALSE,message=FALSE,warning=FALSE}
+
+#Connecting to Twitter API
+
+#cunsumer_key <- 'ACCESS TOKEN'
+#cunsumer_secret <- 'ACCESS TOKEN SECRET'
+#access_token <- 'API KEY'
+#access_token_secret <- 'API SECRET'
+
+#setup_twitter_oauth(cunsumer_key, cunsumer_secret, access_token, access_token_secret)
+
+#Extracting tweets containing ???bitcoin??? & 'netflix' keywords and save them as csv
+#Bouba_tweet.bitcoin <- searchTwitter("bitcoin", n=7000)
+#Bouba_tweet.netflix <- searchTwitter("netflix", n= 7000)
+#B_bitcoin <- twListToDF(Bouba_tweet.bitcoin)
+#B_netflix <- twListToDF(Bouba_tweet.netflix)
+#write.csv(B_bitcoin$text, file="twitter_bitcoin.csv")
+#write.csv(B_netflix$text, file="twitter_netflix.csv")
+
+
+bitcoin_tweet <- read_csv("https://raw.githubusercontent.com/selecta21/Project_Boubacar/master/twitter_bitcoin.csv")
+netflix_tweet <-read_csv("https://raw.githubusercontent.com/selecta21/Project_Boubacar/master/twitter_netflix.csv")
+
+bitcoin_tweet <- bitcoin_tweet[,-1]
+netflix_tweet <- netflix_tweet[,-1]
+
+
+#Cleaning bitcoin tweets Data
+B_Corpus <- Corpus(VectorSource(bitcoin_tweet))
+removeURL <- function(x) gsub("http[^[:space:]]*", "", x)
+B_Corpus <- tm_map(B_Corpus, content_transformer(removeURL))
+removeNumPunct <- function(x) gsub("[^[:alpha:][:space:]]*", "", x)
+B_Corpus <- tm_map(B_Corpus, content_transformer(removeNumPunct))
+B_Corpus <- tm_map(B_Corpus, stripWhitespace)
+B_CorpusCopy <- B_Corpus
+B_Corpus <- tm_map(B_Corpus, stemDocument)
+B_Corpus <- Corpus(VectorSource(B_Corpus))
+
+
+
+#Creating the term document matrix
+wordFreq <- function(corpus, word) {
+  results <- lapply(corpus,
+                    function(x) { grep(as.character(x), pattern=paste0("\\<",word)) }
+  )
+  sum(unlist(results))
+}
+B_tdm <- TermDocumentMatrix(B_CorpusCopy,control = list(wordLengths = c(1, Inf)))
+
+#Finding out the most frequent words
+(freq.terms <- findFreqTerms(B_tdm, lowfreq = 200))
+
+```
+Those are the most frequent words used in bitcoin tweets.
+
+
+
+```{r, echo=FALSE,message=FALSE,warning=FALSE}
+#Removing stop words
+B_Stopwords <- c(setdiff(stopwords('english'), c("r", "big")),"and", "when", 
+                 "what", "to", "this","the","that","so","of","it","is","in",
+                 "at","a","be","by","for","have","on","our","are","i","will",
+                 "with","you")
+
+
+#Creating Wordcloud
+B_Corpus <- tm_map(B_Corpus, removeWords, B_Stopwords)
+
+wordcloud(B_Corpus ,max.words =100,min.freq=5,scale=c(4,.5),colors=palette())
+```
+
+
+As we can see in the above picture, bitcoin is most used word after removing stop words.
+
+
+    Below are the most frequent words after removing stop words
+```{r,echo=FALSE,message=FALSE,warning=FALSE}
+#Most frequent words after removing stop words
+(freq.terms <- findFreqTerms(B_tdm, lowfreq = 110))
+
+#Plot of most frequent words
+term.freq <- rowSums(as.matrix(B_tdm))
+term.freq <- subset(term.freq, term.freq >= 300)
+B_data2 <- data.frame(term = names(term.freq), freq = term.freq)
+ggplot(B_data2, aes(x=term, y=freq)) + geom_bar(stat="identity") +xlab("Terms") + ylab("Count") + coord_flip() +theme(axis.text=element_text(size=7))
+```
+
+
+Bitcoin appears to be the most used word and then rt is the second most used, probably because it is an abbreviation
+of retweet and real time. Many retweets occured and people follow the coin chart in real time.
+
+
+
+```{r,echo=FALSE,message=FALSE,warning=FALSE}
+#Cleaning netflix tweets Data
+N_Corpus <- Corpus(VectorSource(netflix_tweet))
+removeURL <- function(x) gsub("http[^[:space:]]*", "", x)
+N_Corpus <- tm_map(N_Corpus, content_transformer(removeURL))
+removeNumPunct <- function(x) gsub("[^[:alpha:][:space:]]*", "", x)
+N_Corpus <- tm_map(N_Corpus, content_transformer(removeNumPunct))
+N_Corpus <- tm_map(N_Corpus, stripWhitespace)
+N_CorpusCopy <- N_Corpus
+N_Corpus <- tm_map(N_Corpus, stemDocument)
+N_Corpus <- Corpus(VectorSource(N_Corpus))
+
+
+
+#Creating the term document matrix
+wordFreq <- function(corpus, word) {
+  results <- lapply(corpus,
+                    function(x) { grep(as.character(x), pattern=paste0("\\<",word)) }
+  )
+  sum(unlist(results))
+}
+N_tdm <- TermDocumentMatrix(N_CorpusCopy,control = list(wordLengths = c(1, Inf)))
+#Finding out the most frequent words
+(freq.terms <- findFreqTerms(N_tdm, lowfreq = 200))
+```
+
+
+Those above are words that occured more than 200 time in netflix tweets.
+
+
+
+```{r,echo=FALSE,message=FALSE,warning=FALSE}
+#Removing stop words
+N_Stopwords <- c(setdiff(stopwords('english'), c("r", "big")),"and", "when", 
+                 "what", "to", "this","the","that","so","of","it","is","in",
+                 "at","a","be","by","for","have","on","our","are","i","will",
+                 "with","you")
+
+
+#Creating Wordcloud
+N_Corpus <- tm_map(N_Corpus, removeWords, N_Stopwords)
+
+wordcloud(N_Corpus ,max.words =100,min.freq=5,scale=c(4,.5),colors=palette())
+```
+
+
+As we can see from the above plot , netlix word has the highest frequency among all words mentioned in the tweet,
+which make sense because the tweets are about netflix stock.
+
+
+
+```{r,echo=FALSE,message=FALSE,warning=FALSE}
+#Most frequent words after removing stop words
+(freq.terms <- findFreqTerms(N_tdm, lowfreq = 110))
+
+```
+Most frequent words after removing stop words
+
+
+```{r,echo=FALSE,message=FALSE,warning=FALSE}
+#Plot of most frequent words
+term.freq <- rowSums(as.matrix(N_tdm))
+term.freq <- subset(term.freq, term.freq >= 300)
+N_data2 <- data.frame(term = names(term.freq), freq = term.freq)
+ggplot(N_data2, aes(x=term, y=freq)) + geom_bar(stat="identity") +xlab("Terms") + ylab("Count") + coord_flip() +theme(axis.text=element_text(size=7))
+
+
+
+```
+
+
+
+
+As for Bitcoin, netflix appears to be the most used word and then rt is the second most used, probably because it is an abbreviation
+of retweet and real time. Many retweets occured and people follow the stock price change chart in real time.
+
+
+
+     
+     
+```{r, echo=FALSE,message=FALSE,warning=FALSE}   
+#Most common positive and negative words
+clean_tweet = gsub("&amp", "", bitcoin_tweet)
+clean_tweet = gsub("(RT|via)((?:\\b\\W*@\\w+)+)", "", clean_tweet)
+clean_tweet = gsub("@\\w+", "", clean_tweet)
+clean_tweet = gsub("[[:punct:]]", "", clean_tweet)
+clean_tweet = gsub("[[:digit:]]", "", clean_tweet)
+clean_tweet = gsub("http\\w+", "", clean_tweet)
+clean_tweet = gsub("[ \t]{2,}", "", clean_tweet)
+clean_tweet = gsub("^\\s+|\\s+$", "", clean_tweet)
+
+
+#get rid of unnecessary spaces
+clean_tweet <- str_replace_all(clean_tweet," "," ")
+# Take out retweet header, there is only one
+clean_tweet <- str_replace(clean_tweet,"RT @[a-z,A-Z]*: ","")
+# Get rid of hashtags
+clean_tweet <- str_replace_all(clean_tweet,"#[a-z,A-Z]*","")
+# Get rid of references to other screennames
+clean_tweet <- str_replace_all(clean_tweet,"@[a-z,A-Z]*","")
+
+B_cleaned <- clean_tweet[1]
+
+words <- strsplit(B_cleaned, " ")[[1]]
+
+#This is a typical character vector that we might want to analyze.
+#In order to turn it into a tidy text dataset, we first need to put it into a data frame
+
+B_text_df <- as.tibble(words)
+B_text_df <-B_text_df %>%
+  unnest_tokens(word, value) 
+
+B_text_df <- table(unlist(B_text_df))
+B_text_df <- as.data.frame(B_text_df, stringAsFactors =F)
+colnames(B_text_df) <- c("word", "n")
+Bouba_text_df <- B_text_df
+
+B_text_df<- B_text_df %>%
+  filter(word !="miss") %>%
+  inner_join(get_sentiments("bing")) %>%
+  spread(sentiment, n, fill=0) %>%
+  mutate(sentiment = positive - negative)
+head(B_text_df)
+p<-ggplot(B_text_df, aes(word, sentiment, fill=sentiment)) + geom_bar(alpha = 1, stat ="identity")
+#devtools::install_github('hadley/ggplot2')
+library(plotly)
+ggplotly(p)
+           
+           
+           Bouba_text_df %>%
+             inner_join(get_sentiments("bing")) %>%
+             acast(word ~ sentiment, value.var = "n", fill = 0) %>%
+             comparison.cloud(colors = c("gray20", "gray80"),
+                              max.words = 100)
+           
+           Bitcoin_sentiment <- Bouba_text_df %>%
+             inner_join(get_sentiments("bing")) %>%
+             spread(sentiment, n, fill = 0) %>%
+             mutate(sentiment = positive - negative)
+           
+           
+           
+           bing_word_counts <- Bouba_text_df %>%
+             inner_join(get_sentiments("bing")) %>%
+             ungroup()
+           
+           
+           bing_word_counts %>%
+             filter(abs(n) >10) %>%
+             group_by(sentiment) %>%
+             top_n(10) %>%
+             ungroup() %>%
+             mutate(word = reorder(word, n)) %>%
+             ggplot(aes(word, n, fill = sentiment)) +
+             geom_col(show.legend = FALSE) +
+             facet_wrap(~sentiment, scales = "free_y") +
+             labs(y = "Contribution to sentiment",
+                  x = NULL) +
+             coord_flip()
+```  
+
+
+As we can see from the sentiment contribution, people tend to have more negative feeling when the miss a change to trade positively .On the other hand, people are more positive when they are making profit, they like it more and achieve the highest level of positive sentiment. The same apply to netflix data.
+           
+           
+          
+           
+           
+           
+           
+ 5.Summary 
+ 
+ This project tried to shed light on the factors classifying the price of Bitcoins and Netflix stock in the short-run as well as in the long-run. We built an empirical model incorporating Kernel PCA and Logistic Regression but also extended the existing literature by taking Twitter sentiment into account. Specifically, we used sentiment analysis to measure the sentiment ratio of Twitter users concerning Bitcoins and Netflix stock on a daily basis. After dealing with issues of extracting and cleaning tweets, we estimated that our Twitter sentiment ratio has a positive short-run impact on Bitcoin prices as well as Netflix stock price.
+Sentiment analysis provides a way to understand the attitudes and opinions expressed in texts.
+Bitcoin offers a novel open door for forecast due its relatively young age and resulting volatility, but
+fluctuations in a market are difficult to predict.
+
+           
+           
+           
+           
+    References :
+             https://en.wikipedia.org/wiki/Netflix
+           https://www.cnbc.com/2018/04/16/netflix-earnings-q1-2018.html
+           https://www.ccn.com/only-another-four-million-bitcoin-will-be-mined-heres-why/
+             http://r-statistics.co/Top50-Ggplot2-Visualizations-MasterList-R-Code.html
+           http://www.milanor.net/blog/performing-principal-components-regression-pcr-in-r/
+          https://www.tidytextmining.com/sentiment.html 
+           https://www.r-bloggers.com/analysing-cryptocurrency-market-in-r/
+           
+          
+             
+             
+        
+          
